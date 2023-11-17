@@ -44,7 +44,6 @@ void cleanCache(Cache *cache);
 //Starts main
 int main()
 {
-    printf("hello\n");
     
     Cache cache;
 
@@ -56,6 +55,7 @@ int main()
     if (initializeCache(&cache)) {
 
         printf("cool\n");
+        cleanCache(&cache);
 
 
     //Calls print summary
