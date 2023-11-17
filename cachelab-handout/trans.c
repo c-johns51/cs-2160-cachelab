@@ -1,4 +1,6 @@
 /* 
+Carson King SID:109920861
+
  * trans.c - Matrix transpose B = A^T
  *
  * Each transpose function must have a prototype of the form:
@@ -20,8 +22,42 @@ int is_transpose(int M, int N, int A[N][M], int B[M][N]);
  *     be graded. 
  */
 char transpose_submit_desc[] = "Transpose submission";
-void transpose_submit(int M, int N, int A[N][M], int B[M][N])
-{
+void transpose_submit(int M, int N, int A[N][M], int B[M][N]) {
+    //creates temp variables
+    int i,j,ii,jj,tmp;
+
+    //optimize for 32 bit cache
+    if(M == 32 && N ==32) {
+        for ( i =0; i < N; i += 8 ) {
+            for ( j = 0; j < M; j+= 8) {
+                for( ii = i; ii < i + 8; ii++) {
+                    for( jj = j; jj < j + 8; jj++ ) {
+                        if(ii != jj) {
+                            B[jj][ii] = A[ii][jj];
+                        }
+                        else {
+                            tmp = A[ii][jj];
+                        }
+
+                    }
+                    if(i == j) {
+                        B[ii][ii] = tmp;
+                    }
+                }
+            }
+        }
+    }
+    //If all else fails, default to original method
+    else {
+            for (i = 0; i < N; i++) {
+        for (j = 0; j < M; j++) {
+            tmp = A[i][j];
+            B[j][i] = tmp;
+        }
+    }   
+    }
+
+
 }
 
 /* 
