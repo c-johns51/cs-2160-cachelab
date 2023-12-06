@@ -1,0 +1,7 @@
+-- WHAT'S LEFT TO DO --
+1. csim.c compiles and reads values from the tracefile, however misses, hits and evictions are not being properly done
+    a. 2D array traversal through pointer arithmetic should be working fine, however will need testing with hardcoded values to see why it isn't
+    b. One of my assumptions are that the tag isn't being properly done, resulting in skewed hits/miss/evict counts
+
+2. trans.c seems to be not functioning at all when running test-trans
+    a. Also need to make sure that the given transpose functions actually provide good results

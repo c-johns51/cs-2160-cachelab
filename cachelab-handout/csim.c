@@ -14,60 +14,37 @@ Cameron Johnson | SID: 109667312
 #include <errno.h>
 #include <stdbool.h>
 
-#define MAX_SIZE 64
+#define MEM_SIZE 64
+
+// Global variables
+bool verbose = false;
+int lruLine = 0;
 
 
-// Cache structure
-
+// CacheLine structure
 typedef struct cacheLine {
-    int valid;
+    int set;
+    int tag;
+    int lru;
     
 } CacheLine;
 
-typedef struct cacheSet {
-    CacheLine* lines;
-    
-} CacheSet;
-
-// Structure for holding how many sets, num of lines per set, and number of block bits per line
-typedef struct cache{
-    int s;
-    int E;
-    int b;
-    int tag;
-    int lru;
-    CacheSet *sets;
-
-} Cache;
-
-
-// Function protos
-void printSummary(int hits, int misses, int evictions);
-bool initializeCache(Cache* cache);
-void cleanCache(Cache *cache);
-void simulateCache(Cache *cache, FILE *filePtr, int *hits, int *miss, int *eviction);
-int LRU (CacheLine Line, Cache cache, unsigned long long set);
+// Function prototype
+void buildCache(CacheLine* cache, int S, int E);
+void simulateCache(CacheLine *cache, unsigned long long address, int E, int *hits, int *miss, int *evictions, int s, int b, int tag);
 //Starts main
-int main(int argc, char *argv[])
-{
-    
-        int s = 4;
-        int E = 1;
-        int b = 4;
-        int m = 64;
+int main(int argc, char *argv[]) {
 
-    CacheLine cache[s][E];
-    FILE *filePtr;
-
-    //Checks cache can be intialized, if so initalizes it
-     if (initializeCache(&cache)) {
-
-        
-
-        int opt;
-        char *tracefile = "traces/dave.trace";
-
-    /*while((opt = getopt(argc, argv, "s:E:b:t:vh")) != -1){
+    int hits = 0;
+    int misses = 0;
+    int evictions = 0;
+    int s,E,b;
+    char *tracefile;
+    int opt;
+    char c;
+    unsigned long long address;
+    int size;
+    while((opt = getopt(argc, argv, "s:E:b:t:v")) != -1){
 
         switch(opt){
 
@@ -75,7 +52,7 @@ int main(int argc, char *argv[])
                 s = atoi(optarg);
                 break;
             case 'E':
-                cache.E = atoi(optarg);
+                E = atoi(optarg);
                 break;
             case 'b':
                 b = atoi(optarg);
@@ -83,204 +60,184 @@ int main(int argc, char *argv[])
             case 't':
                 tracefile = optarg;
                 break;
-            case 'h':
-                exit(0);
+            case 'v':
+                verbose = true;
+                break;
             default:
-                exit(1);
+                exit(0);
         
+        }
+    } // End opt while loop
 
+    int S = pow(2, s);
+    int tag = MEM_SIZE - (s + b);
+
+    // Allocates enough memory for the cache, using the number of sets and lines times the size of CacheLine struct
+    // Then buildCache() builds the cache using this memory
+    CacheLine *cache = malloc((S * E) * sizeof(CacheLine));
+    buildCache(cache, S, E);
+
+    // Opens a file on the given tracefile
+    FILE *filePtr = fopen(tracefile, "r");
+
+    // If the tracefile was successfully opened...
+    if(filePtr != NULL){
+
+        // While the tracefile still has lines to be read...
+        while(fscanf(filePtr, " %c %llx,%d", &c, &address, &size) == 3){
+
+            // Prints the current line in the tracefile if in verbose mode
+            if(verbose){
+
+                printf(" %c %llx,%d", c, address, size);
+
+            }
+            // Switch cases that perform a cache sim (or doesn't if operation is I)
+            switch(c){
+                case 'I':
+                    break;
+                case 'M':
+                    // M is a special case where two cache hits or a miss and a hit and eviction are possible
+                    // The cache sim is run twice to account
+                    simulateCache(cache, address, E, &hits, &misses, &evictions, s, b, tag);
+                    simulateCache(cache, address, E, &hits, &misses, &evictions, s, b, tag);
+                    break;
+                case 'S':
+                    simulateCache(cache, address, E, &hits, &misses, &evictions, s, b, tag);
+                    break;
+                case 'L':
+                    simulateCache(cache, address, E, &hits, &misses, &evictions, s, b, tag);
+                    break;
+                default:
+                    break;
+            }
+
+            if(verbose){
+
+                printf("\n");
+            }
 
         }
 
 
-    
-        
-
-    } // End opt while loop*/
-
-        cache.s = 16;
-        cache.b = 16;
-        cache.E = 1;
-        int tag = m - (s + b);
-
-        printf("%d, %d, %d\n", cache.s, cache.b, cache.E);
-
-        puts(tracefile);
-        filePtr = fopen(tracefile, "r");
-
-        int totalHits = 0;
-        int totalMiss = 0;
-        int totalEvictions = 0;
-        
-        //Runs the trace file for the simulated cache
-        simulateCache(&cache, filePtr, &totalHits, &totalMiss, &totalEvictions);
-        printf("\n");
-
-        //Prints the summary of the totals
-        printSummary(totalHits, totalMiss, totalEvictions);
-
-        //Frees the memory after the program is complete
-        cleanCache(&cache);
-
-
-    //Calls print summary
-    }
-    else {
-
-        printf("Failed to initialize cache. End of program.");
-
     }
 
+    printSummary(hits, misses, evictions);
 
-    //End of program
-}//End of main
-
-//Prints the summary of the calculations
-void printSummary(int hits, int misses, int evictions) {
-    printf("Total hits: %d Total misses: %d Total evictions: %d\n", hits, misses, evictions);
-}//End of print summary
-
-//Start of LRU function
+    //Frees the memory allocated in the cache
+    free(cache);
 
 
+} // End of main
 
-//Initalizes the cache
-/*bool initializeCache(Cache* cache) {
+// Function that builds the cache given the pointer where the cache is located
+void buildCache(CacheLine *cache, int S, int E){
 
-    puts("test1");
+    // Creates a new line and gives it a tag of -1 (basically no tag) and a LRU value of 0
+    CacheLine currLine;
+    currLine.tag = -1;
+    currLine.lru = 0;
 
-    cache->sets = (CacheSet *)malloc(sizeof(CacheSet) * (1 < cache->s));
+    // Uses pointer arithmetic inside a nested loop to traverse the 2D array, places currLine in each index
+    for(int i = 0; i < S; i++){
+        for(int j = 0; j < E; j++){
 
-    bool memAlloc = true;
+            cache[i * E + j] = currLine;
 
-    //Checks if memory can be allocated for the cahce sets
-    if (cache->sets == NULL) {
-        fprintf(stderr, "Memory Allocation failed for Cache Sets\n");
-        memAlloc = false;
-    }
-
-    //If it Succeed
-    else {
-
-        //Allocates each line of the cache
-        for (int i = 0; i < (1 < cache->s); i++) {
-            cache->sets[i].lines = (CacheLine*)malloc(sizeof(CacheLine) * cache->E);
-            
-            //Checks if the allocation has failed and at what set
-            if (cache->sets[i].lines == NULL) {
-                fprintf(stderr, "Memory Allocation failed for Cache Lines in set %d\n", i);
-                memAlloc = false;
-
-            }//End of if
-
-            else {
-                for (int j = 0; j > cache->E; j++) {
-                    cache->sets[i].lines[j].lru = 0;
-                    cache->sets[i].lines[j].tag = -1;
-                }//End of for loop
-            }//End of final if
-        }//End of for loop
-    }//End of intial if
-
-    puts("test2");
-    return memAlloc;
-}//End of initialize cache*/
-bool intializeCache(Cache line[MAX_SIZE][MAX_SIZE], int S, int E) {
-    Cache currentLine;
-    currentLine.tag = -1;
-    currentLine.lru = 0;
-
-    for (int i = 0; i < S; i++) {
-        for (int j = 0; j < E; j++) {
-            line[i][j] == currentLine;
         }
+
     }
+
 }
 
+void simulateCache(CacheLine *cache, unsigned long long address, int E, int *hits, int *miss, int *evictions, int s, int b, int tag){
 
-//Start of cleanCache
-void cleanCache(Cache *cache) {
-    
-    //Free's each cache's line
-    for (int i = 0; i < (i < cache->s); i++) {
-        free(cache->sets[i].lines);
-    }
+    // Creates a line to compare to cache values, using the given address, s, b, and tag
+    CacheLine currLine;
+    currLine.tag = address >> (s+b);
+    currLine.set = address << tag;
+    currLine.set = currLine.set >> (tag + b);
 
-    //Frees the cache set
-    free(cache->sets);
-}//End of cleanCache
+    //Creates some holder variables
+    bool hit = false;
+    bool empty = false;
+    int emptyLine = 0;
 
-//Simulates the actual cache
-void simulateCache(Cache *cache, FILE *tracefile, int *hits, int *miss, int *eviction) {
+    for (int i = 0; i < E; i++) {
 
-    puts("test3");
-    //Declares intial variables
-    char operation;
-    unsigned long address;
-    int size;
-    
-    if(tracefile != NULL){
-        puts("test3.5");
+        // If the tag line of the line in the cache is the same as the current line's tag line,
+        // result in a hit and update hits counter, set hit to true, increment LRU counter by 1 and,
+        // update the cache line's lru value
+        if(cache[currLine.set * E + i].tag == currLine.tag) {
+            (*hits)++;
 
-        //Gets the tag and index from the address
-    while(fscanf(tracefile, " %c %lx,%d", &operation, &address, &size) == 3) {
+            if(verbose){
 
-        puts("test4");
-        if (operation != 'I') {
-            unsigned long tag = address >> (cache->s + cache->b);
-            unsigned long setIndex = (address >> cache->b) & ((1 << cache->s) -1);
+                printf(" HIT");
 
-            //Sets intial hit value to zero
-            int hit = 0;
-            int lruIndex = 0;
-            int counter = 0;
-
-            //Checks individual lines in cache sets
-            for (int i = 0; i < cache->E; i++) {
-                CacheLine *line = &cache->sets[setIndex].lines[i];
-                
-                
-                //If a hit occurs
-                if (line->valid && line->tag == tag) {
-                    hit = 1;
-                    (*hits)++;
-
-                    line->lru = counter++;
-
-                    i = cache->E;
-                }//End of if
-                
-                if (line->lru < cache->sets[setIndex].lines[lruIndex].lru) {
-                    lruIndex = i;
-                }
-            }//End of for loop
-
-            if (!hit) {
-
-                //update the miss counter
-                (*miss)++;
-
-                cache->sets[setIndex].lines[lruIndex].lru = counter++;
-
-                //Checks if the line is valid
-                CacheLine *line = &cache->sets[setIndex].lines[0];
-                line->valid = 1;
-                line->tag = tag;
-
-                //If there is a valid value, adds to the evictions counter
-                if (line->valid) {
-
-                    
-                    (*eviction)++;
-                }//End of if
-
-
-            }//End of if no hit
+            }
+            hit = true;
+            lruLine++;
+            cache[currLine.set * E + i].lru = lruLine;
         }//End of if
+
+        //Checks if line is empty
+        if(cache[currLine.set * E + i].tag == -1) {
+            empty = 1;
+            emptyLine = i;
+        }//End of if
+
+    }//End of for loop
+
+
+        // if a hit did not take place and there was an empty line,
+        // set the cache line's tag and lru values to those of the current line's
+        // and update miss counter
+        if(hit == 0 && empty == 1) {
+            cache[currLine.set * E + emptyLine].tag = currLine.tag;
+            cache[currLine.set * E + emptyLine].lru = lruLine;
+            (*miss)++;
+
+            if(verbose){
+
+                printf(" MISS");
+
+            }
+        }//End of if
+
+        // If a hit did not take place and the line was not empty
+        // Use 
+        if(hit == 0 && empty == 0) {
+
+            int smallest = cache[currLine.set * E + 0].lru;
+            int leastUsed = 0;
+            for(int i = 0; i < E; i++){
+
+                if(smallest >= cache[currLine.set * E + i].lru){
+
+                    smallest = cache[currLine.set * E + i].lru;
+                    leastUsed = i;
+
+                }
+
+            }
         
-    }//End of while
 
-    }
+            cache[currLine.set * E + leastUsed].tag = currLine.tag;
+            cache[currLine.set * E + leastUsed].lru = lruLine;
+            (*miss)++;
+            (*evictions)++;
 
-    puts("test5");
-}//End of simulate cache
+            if(verbose){
+
+                printf(" MISS EVICT");
+
+            }
+        }//End of if    
+
+}//End of cache sim
+
+/*//Prints the summary of the calculations
+void printSummary(int hits, int misses, int evictions) {
+    printf("Total hits: %d Total misses: %d Total evictions: %d\n", hits, misses, evictions);
+}//End of print summary*/
