@@ -1,5 +1,6 @@
 /* 
-Carson King SID:109920861
+Carson King | SID:109920861
+Cameron Johnson | SID: 109667312
 
  * trans.c - Matrix transpose B = A^T
  *
@@ -14,7 +15,7 @@ Carson King SID:109920861
 
 //Prototypes
 int is_transpose(int M, int N, int A[N][M], int B[M][N]);
-void transposeNormal(int size, int M, int N, int A[N][M], int B[M][N]);
+void transposeNormal(int M, int N, int A[N][M], int B[M][N]);
 void transposeOther(int M, int N, int A[N][M], int B[M][N]);
 /* 
  * transpose_submit - This is the solution transpose function that you
@@ -29,11 +30,8 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N]) {
   //Checks the values to determine what kind of transpose should be run 
   switch(M)
     {
-    case 32:
-      transposeNormal(32,M,N,A,B);
-      break;
-    case 64:
-      transposeNormal(64,M,N,A,B);
+    case 32 || 64:
+      transposeNormal(M,N,A,B);
       break;
     default:
       transposeOther(M,N,A,B);
@@ -82,12 +80,12 @@ void transposeOther(int M, int N, int A[N][M], int B[M][N]) {
 
 //Transposes the matrix normally (32x32, 64x64)
 char trans_norm_desc[] = "Normal transpose";
-void transposeNormal(int size, int M, int N, int A[N][M], int B[M][N]) {
+void transposeNormal(int M, int N, int A[N][M], int B[M][N]) {
   int block,i,j,k,l,dindex,temp;
   int diagCheck = 0;
 
   //If its 32
-  if(size == 32) {
+  if(M == 32) {
       block = 8;
   }//End of if
 
@@ -150,9 +148,6 @@ void registerFunctions()
 
     /* Register any additional transpose functions */
     registerTransFunction(trans, trans_desc); 
-
-    registerTransFunction(transposeNormal, trans_norm_desc);
-    registerTransFunction(transposeOther, trans_other_desc);
 
 }
 
